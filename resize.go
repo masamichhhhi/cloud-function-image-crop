@@ -2,29 +2,52 @@ package p
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/jpeg"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"cloud.google.com/go/storage"
 	"github.com/disintegration/imaging"
+	"google.golang.org/api/option"
 )
 
-func ResizeImage(w http.ResponseWriter, r *http.Request) {
-	// parse url
-	p, err := ParseQuery(r)
+func ResizeStorageImage(w http.ResponseWriter, r *http.Request) {
+	width, height, err := ParseWidthAndHeight(r)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	img, err := FetchAndResizeImage(p)
+	credentialFilePath := "./key.json"
+	bucketName := "image-croppper-source"
+
+	objectPath := strings.Replace(r.URL.Path, "/", "", 1)
+
+	ctx := context.Background()
+
+	client, err := storage.NewClient(ctx, option.WithCredentialsFile(credentialFilePath))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
+	obj := client.Bucket(bucketName).Object(objectPath)
+
+	reader, err := obj.NewReader(ctx)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer reader.Close()
+
+	img, err := Resize(reader, width, height)
 	encoded, err := EncodeImageToJpg(img)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -39,6 +62,7 @@ func ResizeImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 }
 
 type ResizerParams struct {
@@ -51,43 +75,30 @@ func NewResizerParams(url string, height, width int) ResizerParams {
 	return ResizerParams{url, height, width}
 }
 
-func ParseQuery(r *http.Request) (*ResizerParams, error) {
-	var p ResizerParams
+func ParseWidthAndHeight(r *http.Request) (int, int, error) {
 	query := r.URL.Query()
-	url := query.Get("url")
-	if url == "" {
-		return &p, errors.New("Url Param 'url' is missing")
-	}
-
-	width, _ := strconv.Atoi(query.Get("width"))
-	height, _ := strconv.Atoi(query.Get("height"))
+	width, _ := strconv.Atoi(query.Get("w"))
+	height, _ := strconv.Atoi(query.Get("h"))
 
 	if width == 0 && height == 0 {
-		return &p, errors.New("Url Param 'height' or 'width' must be set")
+		return 0, 0, errors.New("Url Param 'h' or 'w' must be set")
 	}
 
-	p = NewResizerParams(url, height, width)
-
-	return &p, nil
+	return width, height, nil
 }
 
-func FetchAndResizeImage(p *ResizerParams) (*image.Image, error) {
+func Resize(r io.Reader, w, h int) (*image.Image, error) {
 	var dst image.Image
 
-	response, err := http.Get(p.url)
-	if err != nil {
-		return &dst, err
-	}
-	defer response.Body.Close()
-
-	src, _, err := image.Decode(response.Body)
+	src, _, err := image.Decode(r)
 	if err != nil {
 		return &dst, err
 	}
 
-	dst = imaging.Resize(src, p.width, p.height, imaging.Lanczos)
+	dst = imaging.Resize(src, w, h, imaging.Lanczos)
 
 	return &dst, nil
+
 }
 
 func EncodeImageToJpg(img *image.Image) (*bytes.Buffer, error) {

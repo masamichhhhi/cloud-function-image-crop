@@ -6,3 +6,6 @@ cloud functionで画像のクロップをする
 go build function.go
 go run cmd/main.go
 ```
+
+### TODO
+- cloud storageとつなぐ

@@ -11,7 +11,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	if err := funcframework.RegisterHTTPFunctionContext(ctx, "/", p.ResizeImage); err != nil {
+	if err := funcframework.RegisterHTTPFunctionContext(ctx, "/", p.ResizeStorageImage); err != nil {
 		log.Fatalf("funcframework.RegisterHTTPFunctionContext: %v\n", err)
 	}
 	// Use PORT environment variable, or default to 8080.
