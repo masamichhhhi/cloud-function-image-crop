@@ -8,4 +8,5 @@ go run cmd/main.go
 ```
 
 ### TODO
-- cloud storageとつなぐ
+- wとhをoptionalに
+- cropする

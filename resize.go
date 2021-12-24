@@ -3,7 +3,6 @@ package p
 import (
 	"bytes"
 	"context"
-	"errors"
 	"image"
 	"image/jpeg"
 	"io"
@@ -47,7 +46,9 @@ func ResizeStorageImage(w http.ResponseWriter, r *http.Request) {
 
 	defer reader.Close()
 
-	img, err := Resize(reader, width, height)
+	resizePrams := NewResizerParams(height, width)
+
+	img, err := Resize(reader, resizePrams)
 	encoded, err := EncodeImageToJpg(img)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -66,13 +67,12 @@ func ResizeStorageImage(w http.ResponseWriter, r *http.Request) {
 }
 
 type ResizerParams struct {
-	url    string
 	height int
 	width  int
 }
 
-func NewResizerParams(url string, height, width int) ResizerParams {
-	return ResizerParams{url, height, width}
+func NewResizerParams(height, width int) ResizerParams {
+	return ResizerParams{height, width}
 }
 
 func ParseWidthAndHeight(r *http.Request) (int, int, error) {
@@ -80,14 +80,10 @@ func ParseWidthAndHeight(r *http.Request) (int, int, error) {
 	width, _ := strconv.Atoi(query.Get("w"))
 	height, _ := strconv.Atoi(query.Get("h"))
 
-	if width == 0 && height == 0 {
-		return 0, 0, errors.New("Url Param 'h' or 'w' must be set")
-	}
-
 	return width, height, nil
 }
 
-func Resize(r io.Reader, w, h int) (*image.Image, error) {
+func Resize(r io.Reader, params ResizerParams) (*image.Image, error) {
 	var dst image.Image
 
 	src, _, err := image.Decode(r)
@@ -95,7 +91,11 @@ func Resize(r io.Reader, w, h int) (*image.Image, error) {
 		return &dst, err
 	}
 
-	dst = imaging.Resize(src, w, h, imaging.Lanczos)
+	if params.width == 0 && params.height == 0 {
+		dst = src
+	} else {
+		dst = imaging.Resize(src, params.width, params.height, imaging.Lanczos)
+	}
 
 	return &dst, nil
 
