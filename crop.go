@@ -1,10 +1,16 @@
 package p
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"image"
+	"image/draw"
+	"image/gif"
+	"image/jpeg"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -21,7 +27,7 @@ func CropImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	credentialFilePath := "./key.json"
-	bucketName := "image-cropper-source"
+	bucketName := "image-croppper-source"
 
 	objectPath := strings.Replace(r.URL.Path, "/", "", 1)
 
@@ -43,14 +49,28 @@ func CropImage(w http.ResponseWriter, r *http.Request) {
 
 	defer reader.Close()
 
+	fmt.Println(filepath.Ext(objectPath))
+
+	// TODO: パラメータのバリデーションする
 	cropParams := NewCropParams(width, height, cropStartX, cropStartY)
 
-	img, err := Crop(reader, cropParams)
-	encoded, err := EncodeImageToJpg(img)
+	var encoded *bytes.Buffer
+	if filepath.Ext(objectPath) == "gif" {
+		gif, err := cropGif(reader, cropParams)
+		encoded, err = encodeGif(gif)
 
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		img, err := Crop(reader, cropParams)
+		encoded, err = EncodeImageToJpg(img)
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "image/jpeg")
@@ -104,4 +124,43 @@ func Crop(r io.Reader, params CropParams) (*image.Image, error) {
 	}
 
 	return &dst, nil
+}
+
+func EncodeImageToJpg(img *image.Image) (*bytes.Buffer, error) {
+	encoded := &bytes.Buffer{}
+	err := jpeg.Encode(encoded, *img, nil)
+
+	return encoded, err
+}
+
+func cropGif(reader io.Reader, params CropParams) (*gif.GIF, error) {
+	outGif := &gif.GIF{}
+	g, err := gif.DecodeAll(reader)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, img := range g.Image {
+		p := image.NewPaletted(image.Rect(0, 0, params.width, params.height), img.Palette)
+
+		cropedImage := imaging.Crop(img, image.Rectangle{
+			Min: image.Point{X: params.cropStartX, Y: params.cropStartY},
+			Max: image.Point{X: params.cropStartX + params.width, Y: params.cropStartY + params.height},
+		})
+
+		draw.Draw(p, image.Rect(0, 0, params.width, params.height), cropedImage, image.ZP, draw.Src)
+
+		outGif.Image = append(outGif.Image, p)
+		outGif.Delay = append(outGif.Delay, 0)
+	}
+
+	return outGif, nil
+}
+
+func encodeGif(inGif *gif.GIF) (*bytes.Buffer, error) {
+	encoded := &bytes.Buffer{}
+
+	err := gif.EncodeAll(encoded, inGif)
+	return encoded, err
 }

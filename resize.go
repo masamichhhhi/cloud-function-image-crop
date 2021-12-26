@@ -1,10 +1,8 @@
 package p
 
 import (
-	"bytes"
 	"context"
 	"image"
-	"image/jpeg"
 	"io"
 	"net/http"
 	"strconv"
@@ -99,11 +97,4 @@ func Resize(r io.Reader, params ResizerParams) (*image.Image, error) {
 
 	return &dst, nil
 
-}
-
-func EncodeImageToJpg(img *image.Image) (*bytes.Buffer, error) {
-	encoded := &bytes.Buffer{}
-	err := jpeg.Encode(encoded, *img, nil)
-
-	return encoded, err
 }
