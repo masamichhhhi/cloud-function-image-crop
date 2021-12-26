@@ -8,5 +8,4 @@ go run cmd/main.go
 ```
 
 ### TODO
-- wとhをoptionalに
-- cropする
+- gifがスローモーションになる

@@ -3,7 +3,6 @@ package p
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"image"
 	"image/draw"
 	"image/gif"
@@ -49,13 +48,11 @@ func CropImage(w http.ResponseWriter, r *http.Request) {
 
 	defer reader.Close()
 
-	fmt.Println(filepath.Ext(objectPath))
-
 	// TODO: パラメータのバリデーションする
 	cropParams := NewCropParams(width, height, cropStartX, cropStartY)
 
 	var encoded *bytes.Buffer
-	if filepath.Ext(objectPath) == "gif" {
+	if filepath.Ext(objectPath) == ".gif" {
 		gif, err := cropGif(reader, cropParams)
 		encoded, err = encodeGif(gif)
 
@@ -73,7 +70,8 @@ func CropImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "image/jpeg")
+	// w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Type", "image/gif")
 	w.Header().Set("Content-Length", strconv.Itoa(encoded.Len()))
 
 	_, err = io.Copy(w, encoded)
@@ -141,18 +139,22 @@ func cropGif(reader io.Reader, params CropParams) (*gif.GIF, error) {
 		return nil, err
 	}
 
-	for _, img := range g.Image {
-		p := image.NewPaletted(image.Rect(0, 0, params.width, params.height), img.Palette)
+	if params.width == 0 && params.height == 0 && params.cropStartX == 0 && params.cropStartY == 0 {
+		outGif = g
+	} else {
+		for _, img := range g.Image {
+			p := image.NewPaletted(image.Rect(0, 0, params.width, params.height), img.Palette)
 
-		cropedImage := imaging.Crop(img, image.Rectangle{
-			Min: image.Point{X: params.cropStartX, Y: params.cropStartY},
-			Max: image.Point{X: params.cropStartX + params.width, Y: params.cropStartY + params.height},
-		})
+			cropedImage := imaging.Crop(img, image.Rectangle{
+				Min: image.Point{X: params.cropStartX, Y: params.cropStartY},
+				Max: image.Point{X: params.cropStartX + params.width, Y: params.cropStartY + params.height},
+			})
 
-		draw.Draw(p, image.Rect(0, 0, params.width, params.height), cropedImage, image.ZP, draw.Src)
+			draw.Draw(p, image.Rect(0, 0, params.width, params.height), cropedImage, image.ZP, draw.Src)
 
-		outGif.Image = append(outGif.Image, p)
-		outGif.Delay = append(outGif.Delay, 0)
+			outGif.Image = append(outGif.Image, p)
+			outGif.Delay = append(outGif.Delay, 0)
+		}
 	}
 
 	return outGif, nil
