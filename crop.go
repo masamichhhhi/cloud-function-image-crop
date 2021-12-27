@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ func CropImage(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	credentialFilePath := "./key.json"
@@ -32,9 +34,17 @@ func CropImage(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(credentialFilePath))
+	var client *storage.Client
+
+	if os.Getenv("ENVIRONMENT") == "production" {
+		client, err = storage.NewClient(ctx)
+	} else {
+		client, err = storage.NewClient(ctx, option.WithCredentialsFile(credentialFilePath))
+	}
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	obj := client.Bucket(bucketName).Object(objectPath)
